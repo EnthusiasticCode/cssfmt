@@ -9,27 +9,30 @@ import qualified Text.ParserCombinators.Parsec.Token as P
 
 type CssComment = String
 
-data CssSelectorsGroup = Group CssSelector [CssSelector]
+data CssSelectorsGroup = Group CssSelector [CssSelector] deriving Show
 
-data CssSelector = Selector CssSimpleSelectorSequence [(CssSelectorCombinator, CssSimpleSelectorSequence)]
+data CssSelector = Selector CssSimpleSelectorSequence [(CssSelectorCombinator, CssSimpleSelectorSequence)] deriving Show
 
 data CssSelectorCombinator = Descendant
                            | Child
                            | AdjacentSibling
                            | Sibling
+                           deriving Show
 
 data CssSimpleSelectorSequence = TypedSequence CssTypeSelector [CssSimpleSelector]
                                | UniversalSequence CssUniversalSelector [CssSimpleSelector]
                                | UntypedSequence CssSimpleSelector [CssSimpleSelector]
+                               deriving Show
 
-data CssTypeSelector = Type (Maybe CssNamespacePrefix) CssElementName
+data CssTypeSelector = Type (Maybe CssNamespacePrefix) CssElementName deriving Show
 
 data CssNamespacePrefix = Namespace CssIdentifier
                         | Wildcard
+                        deriving Show
 
 type CssElementName = CssIdentifier
 
-data CssUniversalSelector = Universal (Maybe CssNamespacePrefix)
+data CssUniversalSelector = Universal (Maybe CssNamespacePrefix) deriving Show
 
 data CssSimpleSelector = HashSelector CssHash
                        | ClassSelector CssClass
@@ -43,12 +46,13 @@ data CssSimpleSelector = HashSelector CssHash
                        | NegatedAttribSelector CssAttrib
                        | NegatedPseudoElementSelector CssPseudo
                        | NegatedPseudoClassSelector CssPseudo
+                       deriving Show
 
-data CssHash = Hash CssName
+data CssHash = Hash CssName deriving Show
 
-data CssClass = Class CssIdentifier
+data CssClass = Class CssIdentifier deriving Show
 
-data CssAttrib = Attrib (Maybe CssNamespacePrefix) CssIdentifier (Maybe (CssAttribMatcher, CssAttribValue))
+data CssAttrib = Attrib (Maybe CssNamespacePrefix) CssIdentifier (Maybe (CssAttribMatcher, CssAttribValue)) deriving Show
 
 data CssAttribMatcher = PrefixMatcher
                       | SuffixMatcher
@@ -56,14 +60,17 @@ data CssAttribMatcher = PrefixMatcher
                       | EqualMatcher
                       | IncludeMatcher
                       | DashMatcher
+                      deriving Show
 
 data CssAttribValue = IdentifierValue CssIdentifier
                     | StringValue CssString
+                    deriving Show
 
 data CssPseudo = IdentifierPseudo CssIdentifier
                | FunctionalPseudo CssIdentifier CssExpression
+               deriving Show
 
-data CssExpression = Expression CssExpressionTerm [CssExpressionTerm]
+data CssExpression = Expression CssExpressionTerm [CssExpressionTerm] deriving Show
 
 data CssExpressionTerm = Plus
                        | Minus
@@ -71,8 +78,9 @@ data CssExpressionTerm = Plus
                        | Number Float
                        | String CssString
                        | Identifier CssIdentifier
+                       deriving Show
 
-data CssString = Quote String
+data CssString = Quote String deriving Show
 
 type CssIdentifier = String
 type CssName = String
