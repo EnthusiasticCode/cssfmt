@@ -9,17 +9,73 @@ import qualified Text.ParserCombinators.Parsec.Token as P
 
 type CssComment = String
 
-data CssSimpleSelector = CssUniversal (Maybe String)
-                       | CssElement (Maybe String) String
-                       | CssClass String
-                       | CssId String
-                       | CssHasAttrib String
-                       | CssAttrib String Char String
-                       | CssPseudo String [String]
-                       | CssNegation CssSimpleSelector -- todo this should not be recursive
-data CssSelectorCombinator = Descendant | Child | AdjacentSibling | Sibling
-data CssSelector = CssSelector [CssSimpleSelector]
-                 | CssCombined [CssSimpleSelector] CssSelectorCombinator CssSelector
+data CssSelectorsGroup = Group CssSelector [CssSelector]
+
+data CssSelector = Selector CssSimpleSelectorSequence [(CssSelectorCombinator, CssSimpleSelectorSequence)]
+
+data CssSelectorCombinator = Descendant
+                           | Child
+                           | AdjacentSibling
+                           | Sibling
+
+data CssSimpleSelectorSequence = TypedSequence CssTypeSelector [CssSimpleSelector]
+                               | UniversalSequence CssUniversalSelector [CssSimpleSelector]
+                               | UntypedSequence CssSimpleSelector [CssSimpleSelector]
+
+data CssTypeSelector = Type (Maybe CssNamespacePrefix) CssElementName
+
+data CssNamespacePrefix = Namespace CssIdentifier
+                        | Wildcard
+
+type CssElementName = CssIdentifier
+
+data CssUniversalSelector = Universal (Maybe CssNamespacePrefix)
+
+data CssSimpleSelector = HashSelector CssHash
+                       | ClassSelector CssClass
+                       | AttribSelector CssAttrib
+                       | PseudoElementSelector CssPseudo
+                       | PseudoClassSelector CssPseudo
+                       | NegatedTypeSelector CssTypeSelector
+                       | NegatedUniversalSelector CssUniversalSelector
+                       | NegatedHashSelector CssHash
+                       | NegatedClassSelector CssClass
+                       | NegatedAttribSelector CssAttrib
+                       | NegatedPseudoElementSelector CssPseudo
+                       | NegatedPseudoClassSelector CssPseudo
+
+data CssHash = Hash CssName
+
+data CssClass = Class CssIdentifier
+
+data CssAttrib = Attrib (Maybe CssNamespacePrefix) CssIdentifier (Maybe (CssAttribMatcher, CssAttribValue))
+
+data CssAttribMatcher = PrefixMatcher
+                      | SuffixMatcher
+                      | SubstringMatcher
+                      | EqualMatcher
+                      | IncludeMatcher
+                      | DashMatcher
+
+data CssAttribValue = IdentifierValue CssIdentifier
+                    | StringValue CssString
+
+data CssPseudo = IdentifierPseudo CssIdentifier
+               | FunctionalPseudo CssIdentifier CssExpression
+
+data CssExpression = Expression CssExpressionTerm [CssExpressionTerm]
+
+data CssExpressionTerm = Plus
+                       | Minus
+                       | Dimension Float CssIdentifier
+                       | Number Float
+                       | String CssString
+                       | Identifier CssIdentifier
+
+data CssString = Quote String
+
+type CssIdentifier = String
+type CssName = String
 
 -- SEE http://www.w3.org/TR/css3-selectors/#lex
 -- SEE http://hackage.haskell.org/package/parsec
