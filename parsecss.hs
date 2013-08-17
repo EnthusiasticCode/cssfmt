@@ -4,8 +4,6 @@ module Main where
 
 import Control.Applicative
 import Text.ParserCombinators.Parsec hiding (many, optional, (<|>))
-import Text.ParserCombinators.Parsec.Language
-import qualified Text.ParserCombinators.Parsec.Token as P
 
 type CssComment = String
 
