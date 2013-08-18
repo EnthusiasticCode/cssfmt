@@ -4,6 +4,7 @@ module Main where
 
 import qualified Data.Text as T
 import Data.Text (Text)
+import Data.Char (digitToInt)
 import Text.Parsec
 import Text.Parsec.Text
 import Control.Applicative (pure, (<*>), (<*), (*>), (<$>))
@@ -39,8 +40,7 @@ data CssUniversalSelector = Universal (Maybe CssNamespacePrefix) deriving Show
 data CssSimpleSelector = HashSelector CssHash
                        | ClassSelector CssClass
                        | AttribSelector CssAttrib
-                       | PseudoElementSelector CssPseudo
-                       | PseudoClassSelector CssPseudo
+                       | PseudoSelector CssPseudo
                        | NegatedTypeSelector CssTypeSelector
                        | NegatedUniversalSelector CssUniversalSelector
                        | NegatedHashSelector CssHash
@@ -68,16 +68,15 @@ data CssAttribValue = IdentifierValue CssIdentifier
                     | StringValue CssString
                     deriving Show
 
-data CssPseudo = IdentifierPseudo CssIdentifier
-               | FunctionalPseudo CssIdentifier CssExpression
-               deriving Show
+data CssPseudoType = PseudoClassType | PseudoElementType deriving Show
+
+data CssPseudo = Pseudo CssPseudoType CssIdentifier (Maybe CssExpression) deriving Show
 
 data CssExpression = Expression CssExpressionTerm [CssExpressionTerm] deriving Show
 
 data CssExpressionTerm = Plus
                        | Minus
-                       | Dimension Float CssIdentifier
-                       | Number Float
+                       | Dimension Double (Maybe CssIdentifier)
                        | String CssString
                        | Identifier CssIdentifier
                        deriving Show
@@ -94,20 +93,24 @@ type CssName = Text
 
 --cssSelectorGroup = (++) <$> cssSelector <*> (try group <|> pure "")
 --  where group = (:) <$> char ',' <* whiteSpace <*> cssSelectorGroup
+
 --cssSelector = (++) <$> simpleSelectorSequence <*> (try combined <|> pure "") <* whiteSpace
 --  where combined = (:) <$> combinator <*> cssSelector
 --        combinator = (try (whiteSpace *> (char '+' <|> char '>' <|> char '~')) <|> space) <* whiteSpace
 --        simpleSelectorSequence = try ((++) <$> (try cssTypeSelector <|> cssUniversal) <*> (try selSequence <|> pure "")) <|> selSequence -- todo selSequence should be array
 --        selSequence = cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssNegation
---cssTypeSelector = cssNamespacePrefixed cssElementName
 
 cssNamespacePrefix :: Parser (Maybe CssNamespacePrefix)
 cssNamespacePrefix = try ((try ((Just . Namespace) <$> cssIdentifier) <|> (char '*' *> pure (Just AllNamespaces)) <|> pure (Just NoNamespace)) <* char '|') <|> pure Nothing
 
---cssElementName = cssIdentifier
+cssElementName :: Parser CssIdentifier
+cssElementName = cssIdentifier
 
 cssUniversal :: Parser CssUniversalSelector
 cssUniversal = Universal <$> (cssNamespacePrefix <* char '*') <?> "universal selector"
+
+cssTypeSelector :: Parser CssTypeSelector
+cssTypeSelector = Type <$> cssNamespacePrefix <*> cssElementName <?> "type selector"
 
 cssClass :: Parser CssClass
 cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
@@ -120,10 +123,20 @@ cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
 --              <|> try (string "$=")
 --              <|> try (string "*=")
 --              <|> string "="
---cssPseudo = (++) <$> pseudoColumn <*> (try functionalPseudo <|> cssIdentifier)
---  where pseudoColumn = try (string "::") <|> string ":"
---        functionalPseudo = (++) <$> (cssIdentifier <* whiteSpace) <*> between (char '(') (char ')') functionParams
---        functionParams = (++) <$> cssExpression <*> (try (many1 space *> functionParams) <|> pure "")
+
+cssPseudo :: Parser CssPseudo
+cssPseudo = Pseudo <$> pseudoColon <*> pseudoIdentifier <*> pseudoExpression
+  where pseudoColon = (try (string "::") *> pure PseudoElementType) <|> (char ':' *> pure PseudoClassType)
+        pseudoIdentifier = cssIdentifier <* whiteSpace
+        pseudoExpression = between (char '(') (char ')') (Just <$> functionParams) <|> pure Nothing
+        functionParams = Expression <$> cssExpressionTerm <*> (try $ many (many1 space *> cssExpressionTerm) <|> pure [])
+
+cssExpressionTerm :: Parser CssExpressionTerm
+cssExpressionTerm = char '+' *> pure Plus
+                <|> char '-' *> pure Minus
+                <|> try (Dimension <$> cssNumber <*> (optionMaybe cssIdentifier))
+                <|> try (String <$> cssString)
+                <|> (Identifier <$> cssIdentifier)
 
 --cssNegation = (++) <$> (try $ string ":not") <*> (whiteSpace *> between (char '(') (char ')') cssNegationArg <* whiteSpace)
 --  where cssNegationArg = cssUniversal <|> cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssTypeSelector
@@ -160,14 +173,16 @@ cssString :: Parser CssString
 cssString = (Quote . T.pack) <$> between (char '"') (char '"') (many stringPart) <?> "string literal"
   where stringPart = try (string "\\\"" *> pure '"') <|> noneOf "\""
 
---cssExpression :: Parser CssExpression
---cssExpression = many $ noneOf "( )" -- todo this should be [ [ PLUS | '-' | DIMENSION | NUMBER | STRING | IDENT ] S* ]+
+cssNumber :: Parser Double
+cssNumber = try ((+) <$> (numberParser <|> pure 0) <*> (char '.' *> fractionParser)) <|> numberParser <?> "number"
+  where numberParser = (fromInteger . foldl (\x d -> 10*x + toInteger (digitToInt d)) 0) <$> (many1 digit)
+        fractionParser = (foldr (\d f -> (f + fromIntegral (digitToInt d))/10.0) 0.0) <$> (many1 digit)
 
 --newLine :: Parser Text
 --newLine = T.pack <$> (try $ string "\r\n" <|> string "\n" <|> string "\r" <|> string "\f")
 
---whiteSpace :: Parser ()
---whiteSpace = skipMany space
+whiteSpace :: Parser ()
+whiteSpace = skipMany space
 
 
 --parseCSS :: Text -> Either ParseError CssSelectorsGroup
