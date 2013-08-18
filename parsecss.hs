@@ -28,7 +28,8 @@ data CssSimpleSelectorSequence = TypedSequence CssTypeSelector [CssSimpleSelecto
 data CssTypeSelector = Type (Maybe CssNamespacePrefix) CssElementName deriving Show
 
 data CssNamespacePrefix = Namespace CssIdentifier
-                        | Wildcard
+                        | AllNamespaces
+                        | NoNamespace
                         deriving Show
 
 type CssElementName = CssIdentifier
@@ -99,11 +100,18 @@ type CssName = Text
 --        simpleSelectorSequence = try ((++) <$> (try cssTypeSelector <|> cssUniversal) <*> (try selSequence <|> pure "")) <|> selSequence -- todo selSequence should be array
 --        selSequence = cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssNegation
 --cssTypeSelector = cssNamespacePrefixed cssElementName
---cssNamespacePrefixed p = try ((++) <$> cssNamespacePrefix <*> p) <|> p
---  where cssNamespacePrefix = (++) <$> (try cssIdentifier <|> string "*" <|> pure "") <*> string "|"
+
+cssNamespacePrefix :: Parser (Maybe CssNamespacePrefix)
+cssNamespacePrefix = try ((try ((Just . Namespace) <$> cssIdentifier) <|> (char '*' *> pure (Just AllNamespaces)) <|> pure (Just NoNamespace)) <* char '|') <|> pure Nothing
+
 --cssElementName = cssIdentifier
---cssUniversal = cssNamespacePrefixed (string "*")
---cssClass = (:) <$> char '.' <*> cssIdentifier
+
+cssUniversal :: Parser CssUniversalSelector
+cssUniversal = Universal <$> (cssNamespacePrefix <* char '*') <?> "universal selector"
+
+cssClass :: Parser CssClass
+cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
+
 --cssAttrib = between (char '[') (char ']') ((++) <$> (whiteSpace *> cssNamespacePrefixed cssIdentifier <* whiteSpace) <*> cssAttribValue)
 --  where cssAttribValue = try $ option "" ((++) <$> cssOpt <*> (cssIdentifier <|> cssString))
 --        cssOpt =  try (string "~=")
@@ -121,7 +129,7 @@ type CssName = Text
 --  where cssNegationArg = cssUniversal <|> cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssTypeSelector
 
 cssIdentifier :: Parser CssIdentifier
-cssIdentifier = T.pack <$> ((++) <$> (string "-" <|> pure "") <*> ((:) <$> cssNameStart <*> many cssNameChar))
+cssIdentifier = T.pack <$> ((++) <$> (string "-" <|> pure "") <*> ((:) <$> cssNameStart <*> many cssNameChar)) <?> "identifier"
   where cssNameStart = char '_' <|> letter
 
 cssNameChar :: Parser Char
