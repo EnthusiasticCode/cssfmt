@@ -129,8 +129,23 @@ cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
 --  where cssNegationArg = cssUniversal <|> cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssTypeSelector
 
 cssIdentifier :: Parser CssIdentifier
-cssIdentifier = T.pack <$> ((++) <$> (string "-" <|> pure "") <*> ((:) <$> cssNameStart <*> many cssNameChar)) <?> "identifier"
-  where cssNameStart = char '_' <|> letter
+cssIdentifier = T.append <$> (T.pack <$> (string "-" <|> pure "")) <*> (T.append <$> cssNameStart <*> (T.pack <$> many cssNameChar)) <?> "identifier"
+
+cssNameStart :: Parser Text
+cssNameStart = (T.singleton <$> char '_') <|> (T.singleton <$> letter) <|> (T.singleton <$> cssNonAscii) <|> cssEscape <?> "start of name character"
+
+cssNonAscii :: Parser Char
+cssNonAscii = satisfy (\c -> c >= '\o240' && c <= '\o4177777') <?> "non ascii character"
+
+cssEscape :: Parser Text
+cssEscape = cssUnicode <|> (T.append <$> (T.singleton <$> char '\\') <*> (T.singleton <$> noneOf ("\n\r\f" ++ cssHexDigits))) <?> "escape sequence"
+
+cssHexDigits :: String
+cssHexDigits = ['0'..'9'] ++ ['a'..'f'] ++ ['A'..'F']
+
+cssUnicode :: Parser Text
+cssUnicode = T.append <$> (T.singleton <$> char '\\') <*> (T.pack <$> (try (count 6 hexDigit) <|> ((++) <$> (many1 hexDigit <* unicodeEnd) <*> pure " "))) <?> "unicode escape sequence"
+  where unicodeEnd = try (string "\r\n") <|> string " " <|> string "\n" <|> string "\r" <|> string "\t" <|> string "\f" <?> "end of unicode escape sequence"
 
 cssNameChar :: Parser Char
 cssNameChar = oneOf "-_" <|> alphaNum
