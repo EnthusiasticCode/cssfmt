@@ -148,16 +148,16 @@ cssUnicode = T.append <$> (T.singleton <$> char '\\') <*> (T.pack <$> (try (coun
   where unicodeEnd = try (string "\r\n") <|> string " " <|> string "\n" <|> string "\r" <|> string "\t" <|> string "\f" <?> "end of unicode escape sequence"
 
 cssNameChar :: Parser Char
-cssNameChar = oneOf "-_" <|> alphaNum
+cssNameChar = oneOf "-_" <|> alphaNum <?> "name character"
 
 cssName :: Parser CssName
-cssName = T.pack <$> many1 cssNameChar
+cssName = T.pack <$> many1 cssNameChar <?> "name"
 
 cssHash :: Parser CssHash
-cssHash = Hash <$> ((T.pack <$> string "#") *> cssName)
+cssHash = Hash <$> ((T.pack <$> string "#") *> cssName) <?> "hash selector"
 
 cssString :: Parser CssString
-cssString = (Quote . T.pack) <$> between (char '"') (char '"') (many stringPart)
+cssString = (Quote . T.pack) <$> between (char '"') (char '"') (many stringPart) <?> "string literal"
   where stringPart = try (string "\\\"" *> pure '"') <|> noneOf "\""
 
 --cssExpression :: Parser CssExpression
