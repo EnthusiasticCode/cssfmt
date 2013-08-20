@@ -23,7 +23,7 @@ data CssSelectorCombinator = Descendant
 
 data CssSimpleSelectorSequence = TypedSequence CssTypeSelector [CssSimpleSelector]
                                | UniversalSequence CssUniversalSelector [CssSimpleSelector]
-                               | UntypedSequence CssSimpleSelector [CssSimpleSelector]
+                               | SimpleSequence CssSimpleSelector [CssSimpleSelector]
                                deriving Show
 
 data CssTypeSelector = Type (Maybe CssNamespacePrefix) CssElementName deriving Show
@@ -46,8 +46,7 @@ data CssSimpleSelector = HashSelector CssHash
                        | NegatedHashSelector CssHash
                        | NegatedClassSelector CssClass
                        | NegatedAttribSelector CssAttrib
-                       | NegatedPseudoElementSelector CssPseudo
-                       | NegatedPseudoClassSelector CssPseudo
+                       | NegatedPseudoSelector CssPseudo
                        deriving Show
 
 data CssHash = Hash CssName deriving Show
@@ -94,11 +93,18 @@ type CssName = Text
 --cssSelectorGroup = (++) <$> cssSelector <*> (try group <|> pure "")
 --  where group = (:) <$> char ',' <* whiteSpace <*> cssSelectorGroup
 
---cssSelector = (++) <$> simpleSelectorSequence <*> (try combined <|> pure "") <* whiteSpace
---  where combined = (:) <$> combinator <*> cssSelector
---        combinator = (try (whiteSpace *> (char '+' <|> char '>' <|> char '~')) <|> space) <* whiteSpace
---        simpleSelectorSequence = try ((++) <$> (try cssTypeSelector <|> cssUniversal) <*> (try selSequence <|> pure "")) <|> selSequence -- todo selSequence should be array
---        selSequence = cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssNegation
+cssSelector :: Parser CssSelector
+cssSelector = Selector <$> simpleSelectorSequence <*> many combined
+  where simpleSelectorSequence = (try (TypedSequence <$> cssTypeSelector)
+                             <|> try (UniversalSequence <$> cssUniversal)
+                             <|> SimpleSequence <$> cssSimpleSelector)
+                             <*> many cssSimpleSelector
+        combined = (,) <$> (combinator <* whiteSpace) <*> simpleSelectorSequence
+        combinator = try (whiteSpace *>
+                      (   char '+' *> pure AdjacentSibling
+                      <|> char '>' *> pure Child
+                      <|> char '~' *> pure Sibling))
+                 <|> space *> pure Descendant <?> "selector combinator"
 
 cssNamespacePrefix :: Parser (Maybe CssNamespacePrefix)
 cssNamespacePrefix = try ((try ((Just . Namespace) <$> cssIdentifier) <|> (char '*' *> pure (Just AllNamespaces)) <|> pure (Just NoNamespace)) <* char '|') <|> pure Nothing
@@ -112,11 +118,24 @@ cssUniversal = Universal <$> (cssNamespacePrefix <* char '*') <?> "universal sel
 cssTypeSelector :: Parser CssTypeSelector
 cssTypeSelector = Type <$> cssNamespacePrefix <*> cssElementName <?> "type selector"
 
+cssSimpleSelector :: Parser CssSimpleSelector
+cssSimpleSelector = (try (string ":not") *> between (char '(') (char ')') (whiteSpace *> negationArg <* whiteSpace) <?> "negation")
+                <|> PseudoSelector <$> cssPseudo
+                <|> AttribSelector <$> cssAttrib
+                <|> ClassSelector <$> cssClass
+                <|> HashSelector <$> cssHash
+                where negationArg = NegatedUniversalSelector <$> cssUniversal
+                                <|> NegatedHashSelector <$> cssHash
+                                <|> NegatedClassSelector <$> cssClass
+                                <|> NegatedAttribSelector <$> cssAttrib
+                                <|> NegatedPseudoSelector <$> cssPseudo
+                                <|> NegatedTypeSelector <$> cssTypeSelector
+
 cssClass :: Parser CssClass
 cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
 
 cssAttrib :: Parser CssAttrib
-cssAttrib = between (char '[') (char ']') (Attrib <$> (whiteSpace *> cssNamespacePrefix) <*> (cssIdentifier <* whiteSpace) <*> optionMaybe attrib)
+cssAttrib = between (char '[') (char ']') (Attrib <$> (whiteSpace *> cssNamespacePrefix) <*> (cssIdentifier <* whiteSpace) <*> optionMaybe attrib) <?> "attribute"
   where attrib = (,) <$> matcher <*> value
         matcher = try (string "~=") *> pure IncludeMatcher
               <|> try (string "|=") *> pure HyphenMatcher
@@ -127,7 +146,7 @@ cssAttrib = between (char '[') (char ']') (Attrib <$> (whiteSpace *> cssNamespac
         value = try (IdentifierValue <$> cssIdentifier) <|> (StringValue <$> cssString)
 
 cssPseudo :: Parser CssPseudo
-cssPseudo = Pseudo <$> pseudoColon <*> pseudoIdentifier <*> pseudoExpression
+cssPseudo = Pseudo <$> pseudoColon <*> pseudoIdentifier <*> pseudoExpression <?> "pseudo"
   where pseudoColon = (try (string "::") *> pure PseudoElementType) <|> (char ':' *> pure PseudoClassType)
         pseudoIdentifier = cssIdentifier <* whiteSpace
         pseudoExpression = between (char '(') (char ')') (Just <$> functionParams) <|> pure Nothing
@@ -139,9 +158,6 @@ cssExpressionTerm = char '+' *> pure Plus
                 <|> try (Dimension <$> cssNumber <*> optionMaybe cssIdentifier)
                 <|> try (String <$> cssString)
                 <|> (Identifier <$> cssIdentifier)
-
---cssNegation = (++) <$> (try $ string ":not") <*> (whiteSpace *> between (char '(') (char ')') cssNegationArg <* whiteSpace)
---  where cssNegationArg = cssUniversal <|> cssHash <|> cssClass <|> cssAttrib <|> cssPseudo <|> cssTypeSelector
 
 cssIdentifier :: Parser CssIdentifier
 cssIdentifier = T.append <$> (T.pack <$> (string "-" <|> pure "")) <*> (T.append <$> cssNameStart <*> (T.pack <$> many cssNameChar)) <?> "identifier"
@@ -189,9 +205,10 @@ whiteSpace = skipMany space
 --parseCSS :: Text -> Either ParseError CssSelectorsGroup
 --parseCSS input = parse cssSelectorGroup "culo" input
 
---main =
---    do c <- getContents
---       case parse csvFile "(stdin)" c of
---            Left e -> do putStrLn "Error parsing input:"
---                         print e
---            Right r -> mapM_ print r
+main :: IO ()
+main = putStrLn "Error parsing input:"
+  --do c <- getContents
+  --   case parse cssHash "(stdin)" (T.pack c) of
+  --        Left e -> do putStrLn "Error parsing input:"
+  --                     print e
+  --        Right r -> mapM_ print r
