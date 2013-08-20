@@ -187,11 +187,9 @@ cssHash :: Parser CssHash
 cssHash = Hash <$> (string "#" *> cssName) <?> "hash selector"
 
 cssString :: Parser CssString
-cssString = Quote <$> (string1 <|> string2) <?> "string literal"
-  where string1 = between (char '"') (char '"') (concat <$> many stringPart1)
-        stringPart1 = (try ((:) <$> char '\\' <*> cssNewLine)) <|> cssEscape <|> (return <$> cssNonAscii) <|> (return <$> noneOf "\"\n\r\f")
-        string2 = between (char '\'') (char '\'') (concat <$> many stringPart2)
-        stringPart2 = (try ((:) <$> char '\\' <*> cssNewLine)) <|> cssEscape <|> (return <$> cssNonAscii) <|> (return <$> noneOf "\'\n\r\f")
+cssString = Quote <$> (quotedString '\'' <|> quotedString '\"') <?> "string literal"
+  where quotedString q = between (char q) (char q) (concat <$> many (quotedStringPart q))
+        quotedStringPart q = (try ((:) <$> char '\\' <*> cssNewLine)) <|> cssEscape <|> (return <$> cssNonAscii) <|> (return <$> noneOf (q : "\n\r\f"))
 
 cssNumber :: Parser Double
 cssNumber = try ((+) <$> (numberParser <|> pure 0) <*> (char '.' *> fractionParser)) <|> numberParser <?> "number"
