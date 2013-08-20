@@ -2,12 +2,12 @@
 
 module Main where
 
-import qualified Data.Text as T
-import Data.Text (Text)
-import Data.Char (digitToInt)
-import Text.Parsec
-import Text.Parsec.Text
-import Control.Applicative (pure, (<*>), (<*), (*>), (<$>))
+import           Control.Applicative (pure, (*>), (<$>), (<*), (<*>))
+import           Data.Char           (digitToInt)
+import           Data.Text           (Text)
+import qualified Data.Text           as T
+import           Text.Parsec
+import           Text.Parsec.Text
 
 type CssComment = String
 
@@ -61,7 +61,7 @@ data CssAttribMatcher = PrefixMatcher
                       | SubstringMatcher
                       | EqualMatcher
                       | IncludeMatcher
-                      | DashMatcher
+                      | HyphenMatcher
                       deriving Show
 
 data CssAttribValue = IdentifierValue CssIdentifier
@@ -115,26 +115,28 @@ cssTypeSelector = Type <$> cssNamespacePrefix <*> cssElementName <?> "type selec
 cssClass :: Parser CssClass
 cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
 
---cssAttrib = between (char '[') (char ']') ((++) <$> (whiteSpace *> cssNamespacePrefixed cssIdentifier <* whiteSpace) <*> cssAttribValue)
---  where cssAttribValue = try $ option "" ((++) <$> cssOpt <*> (cssIdentifier <|> cssString))
---        cssOpt =  try (string "~=")
---              <|> try (string "|=")
---              <|> try (string "^=")
---              <|> try (string "$=")
---              <|> try (string "*=")
---              <|> string "="
+cssAttrib :: Parser CssAttrib
+cssAttrib = between (char '[') (char ']') (Attrib <$> (whiteSpace *> cssNamespacePrefix) <*> (cssIdentifier <* whiteSpace) <*> optionMaybe attrib)
+  where attrib = (,) <$> matcher <*> value
+        matcher = try (string "~=") *> pure IncludeMatcher
+              <|> try (string "|=") *> pure HyphenMatcher
+              <|> try (string "^=") *> pure PrefixMatcher
+              <|> try (string "$=") *> pure SuffixMatcher
+              <|> try (string "*=") *> pure SubstringMatcher
+              <|> string "=" *> pure EqualMatcher
+        value = try (IdentifierValue <$> cssIdentifier) <|> (StringValue <$> cssString)
 
 cssPseudo :: Parser CssPseudo
 cssPseudo = Pseudo <$> pseudoColon <*> pseudoIdentifier <*> pseudoExpression
   where pseudoColon = (try (string "::") *> pure PseudoElementType) <|> (char ':' *> pure PseudoClassType)
         pseudoIdentifier = cssIdentifier <* whiteSpace
         pseudoExpression = between (char '(') (char ')') (Just <$> functionParams) <|> pure Nothing
-        functionParams = Expression <$> cssExpressionTerm <*> (try $ many (many1 space *> cssExpressionTerm) <|> pure [])
+        functionParams = Expression <$> cssExpressionTerm <*> try (many (many1 space *> cssExpressionTerm) <|> pure [])
 
 cssExpressionTerm :: Parser CssExpressionTerm
 cssExpressionTerm = char '+' *> pure Plus
                 <|> char '-' *> pure Minus
-                <|> try (Dimension <$> cssNumber <*> (optionMaybe cssIdentifier))
+                <|> try (Dimension <$> cssNumber <*> optionMaybe cssIdentifier)
                 <|> try (String <$> cssString)
                 <|> (Identifier <$> cssIdentifier)
 
@@ -175,15 +177,14 @@ cssString = (Quote . T.pack) <$> between (char '"') (char '"') (many stringPart)
 
 cssNumber :: Parser Double
 cssNumber = try ((+) <$> (numberParser <|> pure 0) <*> (char '.' *> fractionParser)) <|> numberParser <?> "number"
-  where numberParser = (fromInteger . foldl (\x d -> 10*x + toInteger (digitToInt d)) 0) <$> (many1 digit)
-        fractionParser = (foldr (\d f -> (f + fromIntegral (digitToInt d))/10.0) 0.0) <$> (many1 digit)
+  where numberParser = (fromInteger . foldl (\x d -> 10*x + toInteger (digitToInt d)) 0) <$> many1 digit
+        fractionParser = foldr (\d f -> (f + fromIntegral (digitToInt d))/10.0) 0.0 <$> many1 digit
 
 --newLine :: Parser Text
 --newLine = T.pack <$> (try $ string "\r\n" <|> string "\n" <|> string "\r" <|> string "\f")
 
 whiteSpace :: Parser ()
 whiteSpace = skipMany space
-
 
 --parseCSS :: Text -> Either ParseError CssSelectorsGroup
 --parseCSS input = parse cssSelectorGroup "culo" input
