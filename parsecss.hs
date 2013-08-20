@@ -90,7 +90,7 @@ type CssName = String
 
 cssSelectorGroup :: Parser CssSelectorsGroup
 cssSelectorGroup = Group <$> cssSelector <*> many groupElement
-  where groupElement =  (whiteSpace *> char ',' <* whiteSpace) *> cssSelector
+  where groupElement =  (cssWhiteSpace *> char ',' <* cssWhiteSpace) *> cssSelector
 
 cssSelector :: Parser CssSelector
 cssSelector = Selector <$> simpleSelectorSequence <*> many combined
@@ -98,8 +98,8 @@ cssSelector = Selector <$> simpleSelectorSequence <*> many combined
                              <|> try (UniversalSequence <$> cssUniversal)
                              <|> SimpleSequence <$> cssSimpleSelector)
                              <*> many cssSimpleSelector
-        combined = (,) <$> (combinator <* whiteSpace) <*> simpleSelectorSequence
-        combinator = try (whiteSpace *>
+        combined = (,) <$> (combinator <* cssWhiteSpace) <*> simpleSelectorSequence
+        combinator = try (cssWhiteSpace *>
                       (   char '+' *> pure AdjacentSibling
                       <|> char '>' *> pure Child
                       <|> char '~' *> pure Sibling))
@@ -118,7 +118,7 @@ cssTypeSelector :: Parser CssTypeSelector
 cssTypeSelector = Type <$> cssNamespacePrefix <*> cssElementName <?> "type selector"
 
 cssSimpleSelector :: Parser CssSimpleSelector
-cssSimpleSelector = (try (string ":not") *> between (char '(') (char ')') (whiteSpace *> negationArg <* whiteSpace) <?> "negation")
+cssSimpleSelector = (try (string ":not") *> between (char '(') (char ')') (cssWhiteSpace *> negationArg <* cssWhiteSpace) <?> "negation")
                 <|> PseudoSelector <$> cssPseudo
                 <|> AttribSelector <$> cssAttrib
                 <|> ClassSelector <$> cssClass
@@ -134,7 +134,7 @@ cssClass :: Parser CssClass
 cssClass = Class <$> (char '.' *> cssIdentifier) <?> "class"
 
 cssAttrib :: Parser CssAttrib
-cssAttrib = between (char '[') (char ']') (Attrib <$> (whiteSpace *> cssNamespacePrefix) <*> (cssIdentifier <* whiteSpace) <*> optionMaybe attrib) <?> "attribute"
+cssAttrib = between (char '[') (char ']') (Attrib <$> (cssWhiteSpace *> cssNamespacePrefix) <*> (cssIdentifier <* cssWhiteSpace) <*> optionMaybe attrib) <?> "attribute"
   where attrib = (,) <$> matcher <*> value
         matcher = try (string "~=") *> pure IncludeMatcher
               <|> try (string "|=") *> pure HyphenMatcher
@@ -147,7 +147,7 @@ cssAttrib = between (char '[') (char ']') (Attrib <$> (whiteSpace *> cssNamespac
 cssPseudo :: Parser CssPseudo
 cssPseudo = Pseudo <$> pseudoColon <*> pseudoIdentifier <*> pseudoExpression <?> "pseudo"
   where pseudoColon = (try (string "::") *> pure PseudoElementType) <|> (char ':' *> pure PseudoClassType)
-        pseudoIdentifier = cssIdentifier <* whiteSpace
+        pseudoIdentifier = cssIdentifier <* cssWhiteSpace
         pseudoExpression = between (char '(') (char ')') (Just <$> functionParams) <|> pure Nothing
         functionParams = Expression <$> cssExpressionTerm <*> try (many (many1 space *> cssExpressionTerm) <|> pure [])
 
@@ -198,11 +198,15 @@ cssNumber = try ((+) <$> (numberParser <|> pure 0) <*> (char '.' *> fractionPars
   where numberParser = (fromInteger . foldl (\x d -> 10*x + toInteger (digitToInt d)) 0) <$> many1 digit
         fractionParser = foldr (\d f -> (f + fromIntegral (digitToInt d))/10.0) 0.0 <$> many1 digit
 
+-- | Parses one newline
+-- > nl        \n|\r\n|\r|\f
 cssNewLine :: Parser String
 cssNewLine = try $ string "\r\n" <|> string "\n" <|> string "\r" <|> string "\f"
 
-whiteSpace :: Parser ()
-whiteSpace = skipMany space
+-- | Parses whitespace
+-- > w         [ \t\r\n\f]*
+cssWhiteSpace :: Parser String
+cssWhiteSpace = many (oneOf " \t\r\n\f")
 
 --parseCSS :: Text -> Either ParseError CssSelectorsGroup
 --parseCSS input = parse cssSelectorGroup "culo" input
