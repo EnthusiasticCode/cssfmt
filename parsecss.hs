@@ -4,8 +4,6 @@ module Main where
 
 import           Control.Applicative (pure, (*>), (<$>), (<*), (<*>))
 import           Data.Char           (digitToInt)
-import           Data.Text           (Text)
-import qualified Data.Text           as T
 import           Text.Parsec
 import           Text.Parsec.Text
 
@@ -80,15 +78,15 @@ data CssExpressionTerm = Plus
                        | Identifier CssIdentifier
                        deriving Show
 
-data CssString = Quote Text deriving Show
+data CssString = Quote String deriving Show
 
-type CssIdentifier = Text
-type CssName = Text
+type CssIdentifier = String
+type CssName = String
 
 -- SEE http://www.w3.org/TR/css3-selectors/#lex
 -- SEE http://hackage.haskell.org/package/parsec
 -- SEE http://book.realworldhaskell.org/read/using-parsec.html
--- TODO return datatype instead of strings for all of this
+-- TODO reimplement cssString
 
 --cssSelectorGroup = (++) <$> cssSelector <*> (try group <|> pure "")
 --  where group = (:) <$> char ',' <* whiteSpace <*> cssSelectorGroup
@@ -160,44 +158,47 @@ cssExpressionTerm = char '+' *> pure Plus
                 <|> (Identifier <$> cssIdentifier)
 
 cssIdentifier :: Parser CssIdentifier
-cssIdentifier = T.append <$> (T.pack <$> (string "-" <|> pure "")) <*> (T.append <$> cssNameStart <*> (T.pack <$> many cssNameChar)) <?> "identifier"
+cssIdentifier = (++) <$> (string "-" <|> pure "") <*> ((++) <$> cssNameStart <*> many cssNameChar) <?> "identifier"
 
-cssNameStart :: Parser Text
-cssNameStart = (T.singleton <$> char '_') <|> (T.singleton <$> letter) <|> (T.singleton <$> cssNonAscii) <|> cssEscape <?> "start of name character"
+cssNameStart :: Parser String
+cssNameStart = (return <$> (char '_' <|> letter <|> cssNonAscii)) <|> cssEscape <?> "start of name character"
 
 cssNonAscii :: Parser Char
 cssNonAscii = satisfy (\c -> c >= '\o240' && c <= '\o4177777') <?> "non ascii character"
 
-cssEscape :: Parser Text
-cssEscape = cssUnicode <|> (T.append <$> (T.singleton <$> char '\\') <*> (T.singleton <$> noneOf ("\n\r\f" ++ cssHexDigits))) <?> "escape sequence"
+cssEscape :: Parser String
+cssEscape = cssUnicode <|> ((:) <$> char '\\' <*> (return <$> noneOf ("\n\r\f" ++ cssHexDigits))) <?> "escape sequence"
 
 cssHexDigits :: String
 cssHexDigits = ['0'..'9'] ++ ['a'..'f'] ++ ['A'..'F']
 
-cssUnicode :: Parser Text
-cssUnicode = T.append <$> (T.singleton <$> char '\\') <*> (T.pack <$> (try (count 6 hexDigit) <|> ((++) <$> (many1 hexDigit <* unicodeEnd) <*> pure " "))) <?> "unicode escape sequence"
+cssUnicode :: Parser String
+cssUnicode = (:) <$> char '\\' <*> (try (count 6 hexDigit) <|> ((++) <$> (many1 hexDigit <* unicodeEnd) <*> pure " ")) <?> "unicode escape sequence"
   where unicodeEnd = try (string "\r\n") <|> string " " <|> string "\n" <|> string "\r" <|> string "\t" <|> string "\f" <?> "end of unicode escape sequence"
 
 cssNameChar :: Parser Char
 cssNameChar = oneOf "-_" <|> alphaNum <?> "name character"
 
 cssName :: Parser CssName
-cssName = T.pack <$> many1 cssNameChar <?> "name"
+cssName = many1 cssNameChar <?> "name"
 
 cssHash :: Parser CssHash
-cssHash = Hash <$> ((T.pack <$> string "#") *> cssName) <?> "hash selector"
+cssHash = Hash <$> (string "#" *> cssName) <?> "hash selector"
 
 cssString :: Parser CssString
-cssString = (Quote . T.pack) <$> between (char '"') (char '"') (many stringPart) <?> "string literal"
-  where stringPart = try (string "\\\"" *> pure '"') <|> noneOf "\""
+cssString = Quote <$> (string1 <|> string2) <?> "string literal"
+  where string1 = between (char '"') (char '"') (concat <$> many stringPart1)
+        stringPart1 = (return <$> cssNonAscii) <|> try (string "\\\"" *> pure "\"") <|> (return <$> noneOf "\"\n\r\f")
+        string2 = between (char '\'') (char '\'') (concat <$> many stringPart2)
+        stringPart2 = (return <$> cssNonAscii) <|> try (string "\\\'" *> pure "\'") <|> (return <$> noneOf "\'\n\r\f")
 
 cssNumber :: Parser Double
 cssNumber = try ((+) <$> (numberParser <|> pure 0) <*> (char '.' *> fractionParser)) <|> numberParser <?> "number"
   where numberParser = (fromInteger . foldl (\x d -> 10*x + toInteger (digitToInt d)) 0) <$> many1 digit
         fractionParser = foldr (\d f -> (f + fromIntegral (digitToInt d))/10.0) 0.0 <$> many1 digit
 
---newLine :: Parser Text
---newLine = T.pack <$> (try $ string "\r\n" <|> string "\n" <|> string "\r" <|> string "\f")
+cssNewLine :: Parser String
+cssNewLine = try $ string "\r\n" <|> string "\n" <|> string "\r" <|> string "\f"
 
 whiteSpace :: Parser ()
 whiteSpace = skipMany space
