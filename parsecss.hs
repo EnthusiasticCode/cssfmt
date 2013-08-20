@@ -90,8 +90,9 @@ type CssName = Text
 -- SEE http://book.realworldhaskell.org/read/using-parsec.html
 -- TODO return datatype instead of strings for all of this
 
---cssSelectorGroup = (++) <$> cssSelector <*> (try group <|> pure "")
---  where group = (:) <$> char ',' <* whiteSpace <*> cssSelectorGroup
+cssSelectorGroup :: Parser CssSelectorsGroup
+cssSelectorGroup = Group <$> cssSelector <*> many groupElement
+  where groupElement =  (whiteSpace *> char ',' <* whiteSpace) *> cssSelector
 
 cssSelector :: Parser CssSelector
 cssSelector = Selector <$> simpleSelectorSequence <*> many combined
