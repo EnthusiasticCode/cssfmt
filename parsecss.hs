@@ -148,8 +148,10 @@ cssPseudo :: Parser CssPseudo
 cssPseudo = Pseudo <$> pseudoColon <*> pseudoIdentifier <*> pseudoExpression <?> "pseudo"
   where pseudoColon = (try (string "::") *> pure PseudoElementType) <|> (char ':' *> pure PseudoClassType)
         pseudoIdentifier = cssIdentifier <* cssWhiteSpace
-        pseudoExpression = between (char '(') (char ')') (Just <$> functionParams) <|> pure Nothing
-        functionParams = Expression <$> cssExpressionTerm <*> try (many (many1 space *> cssExpressionTerm) <|> pure [])
+        pseudoExpression = between (char '(') (char ')') (Just <$> cssExpression) <|> pure Nothing
+
+cssExpression :: Parser CssExpression
+cssExpression = Expression <$> cssExpressionTerm <*> try (many (many1 space *> cssExpressionTerm) <|> pure [])
 
 cssExpressionTerm :: Parser CssExpressionTerm
 cssExpressionTerm = char '+' *> pure Plus
@@ -189,7 +191,7 @@ cssHash = Hash <$> (string "#" *> cssName) <?> "hash selector"
 cssString :: Parser CssString
 cssString = Quote <$> (quotedString '\'' <|> quotedString '\"') <?> "string literal"
   where quotedString q = between (char q) (char q) (concat <$> many (quotedStringPart q))
-        quotedStringPart q = (try ((:) <$> char '\\' <*> cssNewLine)) <|> cssEscape <|> (return <$> cssNonAscii) <|> (return <$> noneOf (q : "\n\r\f"))
+        quotedStringPart q = try ((:) <$> char '\\' <*> cssNewLine) <|> cssEscape <|> (return <$> cssNonAscii) <|> (return <$> noneOf (q : "\n\r\f"))
 
 cssNumber :: Parser Double
 cssNumber = try ((+) <$> (numberParser <|> pure 0) <*> (char '.' *> fractionParser)) <|> numberParser <?> "number"
